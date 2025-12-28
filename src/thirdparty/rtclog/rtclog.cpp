@@ -21,7 +21,7 @@
 #include <stdarg.h>
 
 #undef RTC_DEFAULT_LOG_CATEGORY
-#define RTC_DEFAULT_LOG_CATEGORY "rtclog"
+#define RTC_DEFAULT_LOG_CATEGORY "RTCLOG"
 
 #define RTCLOG_BASE_FORMAT "%datetime{%Y-%M-%d %H:%m:%s.%g} %level %logger %fbase:%line %msg"
 

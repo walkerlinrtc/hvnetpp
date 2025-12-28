@@ -8,6 +8,7 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <assert.h>
+#include <cstdlib>
 #include <cstring>
 
 namespace hvnetpp {

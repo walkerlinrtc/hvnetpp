@@ -30,6 +30,6 @@ int main() {
 
     server.start();
     RTCLOG(RTC_INFO, "Server started loop");
-    // loop.loop(); // Don't block for test
+    loop.loop();
     return 0;
 }

@@ -79,7 +79,7 @@ void EventLoop::loop() {
         eventHandling_ = true;
         for (Channel* channel : activeChannels_) {
             currentActiveChannel_ = channel;
-            channel->handleEvent(Timestamp(std::chrono::steady_clock::now()));
+            channel->handleEvent();
         }
         currentActiveChannel_ = nullptr;
         eventHandling_ = false;

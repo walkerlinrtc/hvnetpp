@@ -1,5 +1,6 @@
 #include "hvnetpp/EventLoop.h"
 #include "rtclog.h"
+#include "src/thirdparty/rtclog/rtclog.h"
 #include <iostream>
 
 using namespace hvnetpp;
@@ -7,7 +8,8 @@ using namespace hvnetpp;
 int main() {
     // 初始化日志
     rtclog_init("TimerDemo");
-    rtclog_set_level(RTC_INFO);
+    rtclog_configure("logs/demo.log", true);
+    rtclog_set_level(RTC_DEBUG);
 
     EventLoop loop;
 

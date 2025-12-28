@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <functional>
+#include <vector>
 #include "hvnetpp/InetAddress.h"
 
 namespace hvnetpp {

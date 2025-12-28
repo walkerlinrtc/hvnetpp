@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <cstring>
 #include <assert.h>
+#include <cerrno>
 
 namespace hvnetpp {
 

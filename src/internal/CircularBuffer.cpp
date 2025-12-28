@@ -7,7 +7,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-namespace zlnetpp {
+namespace hvnetpp {
 namespace internal {
 
 #ifndef MAP_ANONYMOUS
@@ -85,4 +85,4 @@ void CircularBuffer::createBufferMirror() {
 }
 
 } // namespace internal
-} // namespace zlnetpp
+} // namespace hvnetpp

@@ -3,7 +3,7 @@
 #include <cstddef>
 #include <atomic>
 
-namespace zlnetpp {
+namespace hvnetpp {
 namespace internal {
 
 class CircularBuffer {
@@ -34,4 +34,4 @@ private:
 };
 
 } // namespace internal
-} // namespace zlnetpp
+} // namespace hvnetpp

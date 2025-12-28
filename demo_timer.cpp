@@ -1,6 +1,5 @@
 #include "hvnetpp/EventLoop.h"
-#include "rtclog.h"
-#include "src/thirdparty/rtclog/rtclog.h"
+#include "RTCLog.h"
 #include <iostream>
 
 using namespace hvnetpp;

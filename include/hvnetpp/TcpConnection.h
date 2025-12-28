@@ -19,6 +19,7 @@ public:
     using ConnectionCallback = std::function<void(const TcpConnectionPtr&)>;
     using MessageCallback = std::function<void(const TcpConnectionPtr&, Buffer*)>;
     using WriteCompleteCallback = std::function<void(const TcpConnectionPtr&)>;
+    using HighWaterMarkCallback = std::function<void(const TcpConnectionPtr&, size_t)>;
     using CloseCallback = std::function<void(const TcpConnectionPtr&)>;
 
     TcpConnection(EventLoop* loop,
@@ -42,6 +43,7 @@ public:
     void setConnectionCallback(const ConnectionCallback& cb) { connectionCallback_ = cb; }
     void setMessageCallback(const MessageCallback& cb) { messageCallback_ = cb; }
     void setWriteCompleteCallback(const WriteCompleteCallback& cb) { writeCompleteCallback_ = cb; }
+    void setHighWaterMarkCallback(const HighWaterMarkCallback& cb, size_t highWaterMark) { highWaterMarkCallback_ = cb; highWaterMark_ = highWaterMark; }
     
     // Internal use only
     void setCloseCallback(const CloseCallback& cb) { closeCallback_ = cb; }
@@ -74,7 +76,9 @@ private:
     ConnectionCallback connectionCallback_;
     MessageCallback messageCallback_;
     WriteCompleteCallback writeCompleteCallback_;
+    HighWaterMarkCallback highWaterMarkCallback_;
     CloseCallback closeCallback_;
+    size_t highWaterMark_;
 
     Buffer inputBuffer_;
     Buffer outputBuffer_;

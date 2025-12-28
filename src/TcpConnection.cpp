@@ -20,7 +20,8 @@ TcpConnection::TcpConnection(EventLoop* loop,
       channel_(new Channel(loop, sockfd)),
       socketFd_(sockfd),
       localAddr_(localAddr),
-      peerAddr_(peerAddr) {
+      peerAddr_(peerAddr),
+      highWaterMark_(64*1024*1024) {
     channel_->setReadCallback(std::bind(&TcpConnection::handleRead, this));
     channel_->setWriteCallback(std::bind(&TcpConnection::handleWrite, this));
     channel_->setCloseCallback(std::bind(&TcpConnection::handleClose, this));
@@ -168,6 +169,12 @@ void TcpConnection::sendInLoop(const void* data, size_t len) {
     }
 
     if (!faultError && remaining > 0) {
+        size_t oldLen = outputBuffer_.readableBytes();
+        if (oldLen + remaining >= highWaterMark_
+            && oldLen < highWaterMark_
+            && highWaterMarkCallback_) {
+            loop_->queueInLoop(std::bind(highWaterMarkCallback_, shared_from_this(), oldLen + remaining));
+        }
         outputBuffer_.append(static_cast<const char*>(data) + nwrote, remaining);
         if (!channel_->isWriting()) {
             channel_->enableWriting();

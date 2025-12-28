@@ -21,8 +21,10 @@ public:
         : loop_(loop),
           acceptSocket_(sockets::createNonblockingOrDie(listenAddr.family())),
           acceptChannel_(loop, acceptSocket_),
-          listening_(false) {
+          listening_(false),
+          idleFd_(::open("/dev/null", O_RDONLY | O_CLOEXEC)) {
         
+        assert(idleFd_ >= 0);
         sockets::setReuseAddr(acceptSocket_, true);
         sockets::setReusePort(acceptSocket_, reuseport);
         sockets::bindOrDie(acceptSocket_, listenAddr.getSockAddr());
@@ -34,6 +36,7 @@ public:
         acceptChannel_.disableAll();
         acceptChannel_.remove();
         ::close(acceptSocket_);
+        ::close(idleFd_);
     }
 
     void listen() {
@@ -61,6 +64,12 @@ private:
             }
         } else {
             // log error
+            if (errno == EMFILE) {
+                ::close(idleFd_);
+                idleFd_ = ::accept(acceptSocket_, NULL, NULL);
+                ::close(idleFd_);
+                idleFd_ = ::open("/dev/null", O_RDONLY | O_CLOEXEC);
+            }
         }
     }
 
@@ -69,6 +78,7 @@ private:
     Channel acceptChannel_;
     NewConnectionCallback newConnectionCallback_;
     bool listening_;
+    int idleFd_;
 };
 
 TcpServer::TcpServer(EventLoop* loop, const InetAddress& listenAddr, const std::string& nameArg)

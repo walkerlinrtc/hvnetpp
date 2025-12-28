@@ -41,16 +41,16 @@ EventLoop::EventLoop()
       eventHandling_(false),
       callingPendingFunctors_(false),
       threadId_(std::this_thread::get_id()),
-      poller_(Poller::newDefaultPoller(this)),
+      poller_(new Poller(this)),
       timerQueue_(new TimerQueue(this)),
       wakeupFd_(createEventfd()),
       wakeupChannel_(new Channel(this, wakeupFd_)),
       currentActiveChannel_(nullptr),
       pendingQueue_(new PendingQueue(16))
 {
-    RTCLOG(RTC_DEBUG, "EventLoop created %p in thread %d", this, threadId_);
+    RTCLOG(RTC_DEBUG, "EventLoop created %p in thread %zu", this, std::hash<std::thread::id>{}(threadId_));
     if (t_loopInThisThread) {
-        RTCLOG(RTC_FATAL, "Another EventLoop %p exists in this thread %d", t_loopInThisThread, threadId_);
+        RTCLOG(RTC_FATAL, "Another EventLoop %p exists in this thread %zu", t_loopInThisThread, std::hash<std::thread::id>{}(threadId_));
     } else {
         t_loopInThisThread = this;
     }
@@ -59,7 +59,7 @@ EventLoop::EventLoop()
 }
 
 EventLoop::~EventLoop() {
-    RTCLOG(RTC_DEBUG, "EventLoop %p of thread %d destructs in thread %d", this, threadId_, std::this_thread::get_id());
+    RTCLOG(RTC_DEBUG, "EventLoop %p of thread %zu destructs in thread %zu", this, std::hash<std::thread::id>{}(threadId_), std::hash<std::thread::id>{}(std::this_thread::get_id()));
     wakeupChannel_->disableAll();
     wakeupChannel_->remove();
     ::close(wakeupFd_);
@@ -124,7 +124,7 @@ bool EventLoop::hasChannel(Channel* channel) {
 
 void EventLoop::assertInLoopThread() {
     if (!isInLoopThread()) {
-        RTCLOG(RTC_FATAL, "EventLoop::assertInLoopThread - Created in thread %d current thread %d", threadId_, std::this_thread::get_id());
+        RTCLOG(RTC_FATAL, "EventLoop::assertInLoopThread - Created in thread %zu current thread %zu", std::hash<std::thread::id>{}(threadId_), std::hash<std::thread::id>{}(std::this_thread::get_id()));
     }
 }
 

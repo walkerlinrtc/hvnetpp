@@ -25,7 +25,7 @@ hvnetpp is a high-performance, non-blocking network library for C++. It uses `ep
 
 1.  Clone the repository:
     ```bash
-    git clone https://github.com/yourusername/hvnetpp.git
+    git clone https://github.com/walkerlinrtc/hvnetpp.git
     cd hvnetpp
     ```
 

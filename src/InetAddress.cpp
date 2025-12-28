@@ -3,6 +3,8 @@
 #include <netdb.h>
 #include <strings.h>
 #include <cstring>
+#include <cstddef>
+#include <cassert>
 #include <arpa/inet.h>
 
 // INADDR_ANY use (type)value casting.

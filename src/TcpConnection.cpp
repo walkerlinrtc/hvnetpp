@@ -2,6 +2,7 @@
 #include "hvnetpp/Channel.h"
 #include "hvnetpp/EventLoop.h"
 #include "hvnetpp/SocketsOps.h"
+#include "RTCLog.h"
 #include <unistd.h>
 #include <sys/socket.h>
 #include <netinet/tcp.h>
@@ -86,7 +87,7 @@ void TcpConnection::handleWrite() {
                 }
             }
         } else {
-            // log error
+            RTCLOG(RTC_ERROR, "TcpConnection::handleWrite error: %s", strerror(errno));
         }
     }
 }
@@ -107,8 +108,8 @@ void TcpConnection::handleClose() {
 }
 
 void TcpConnection::handleError() {
-    // int err = sockets::getSocketError(channel_->fd());
-    // log error
+    int err = sockets::getSocketError(channel_->fd());
+    RTCLOG(RTC_ERROR, "TcpConnection::handleError name=%s - SO_ERROR=%d: %s", name_.c_str(), err, strerror(err));
 }
 
 void TcpConnection::send(const std::string& message) {

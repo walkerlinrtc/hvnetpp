@@ -3,6 +3,7 @@
 #include "hvnetpp/Channel.h"
 #include "hvnetpp/Buffer.h"
 #include "hvnetpp/SocketsOps.h"
+#include "RTCLog.h"
 
 #include <sys/socket.h>
 #include <unistd.h>
@@ -59,7 +60,7 @@ void UdpSocket::handleRead() {
             readCallback_(peer, &buf);
         }
     } else {
-        // log error
+        RTCLOG(RTC_ERROR, "UdpSocket::handleRead() error: %s", strerror(errno));
     }
 }
 

@@ -1,5 +1,6 @@
 #include "hvnetpp/Poller.h"
 #include "hvnetpp/Channel.h"
+#include "RTCLog.h"
 #include <sys/epoll.h>
 #include <unistd.h>
 #include <cstring>
@@ -13,7 +14,7 @@ Poller::Poller(EventLoop* loop)
       epollfd_(::epoll_create1(EPOLL_CLOEXEC)),
       events_(kInitEventListSize) {
     if (epollfd_ < 0) {
-        // log fatal
+        RTCLOG(RTC_FATAL, "Poller::Poller error: %s", strerror(errno));
     }
 }
 
@@ -33,7 +34,8 @@ void Poller::poll(int timeoutMs, ChannelList* activeChannels) {
         // nothing happened
     } else {
         if (savedErrno != EINTR) {
-            // log error
+            errno = savedErrno;
+            RTCLOG(RTC_ERROR, "Poller::poll() error: %s", strerror(savedErrno));
         }
     }
 }
@@ -87,7 +89,11 @@ void Poller::update(int operation, Channel* channel) {
     event.data.ptr = channel;
     int fd = channel->fd();
     if (::epoll_ctl(epollfd_, operation, fd, &event) < 0) {
-        // log error
+        if (operation == EPOLL_CTL_DEL) {
+            RTCLOG(RTC_ERROR, "epoll_ctl op=%d fd=%d error: %s", operation, fd, strerror(errno));
+        } else {
+            RTCLOG(RTC_FATAL, "epoll_ctl op=%d fd=%d error: %s", operation, fd, strerror(errno));
+        }
     }
 }
 

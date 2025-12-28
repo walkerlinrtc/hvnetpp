@@ -1,5 +1,6 @@
 #include "hvnetpp/TimerQueue.h"
 #include "hvnetpp/EventLoop.h"
+#include "RTCLog.h"
 #include <sys/timerfd.h>
 #include <unistd.h>
 #include <cstring>
@@ -10,7 +11,7 @@ namespace hvnetpp {
 int createTimerfd() {
     int timerfd = ::timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
     if (timerfd < 0) {
-        // log fatal
+        RTCLOG(RTC_FATAL, "Failed in createTimerfd error: %s", strerror(errno));
     }
     return timerfd;
 }
@@ -32,7 +33,7 @@ void resetTimerfd(int timerfd, Timestamp expiration) {
     newValue.it_value = howMuchTimeFromNow(expiration);
     int ret = ::timerfd_settime(timerfd, 0, &newValue, &oldValue);
     if (ret) {
-        // log error
+        RTCLOG(RTC_ERROR, "timerfd_settime() error: %s", strerror(errno));
     }
 }
 
@@ -40,7 +41,7 @@ void readTimerfd(int timerfd, Timestamp now) {
     uint64_t howmany;
     ssize_t n = ::read(timerfd, &howmany, sizeof howmany);
     if (n != sizeof howmany) {
-        // log error
+        RTCLOG(RTC_ERROR, "TimerQueue::handleRead() reads %zd bytes instead of 8", n);
     }
 }
 

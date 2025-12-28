@@ -1,4 +1,5 @@
 #include "hvnetpp/SocketsOps.h"
+#include "RTCLog.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -39,7 +40,7 @@ const struct sockaddr_in6* sockaddr_in6_cast(const struct sockaddr* addr) {
 int createNonblockingOrDie(sa_family_t family) {
     int sockfd = ::socket(family, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, IPPROTO_TCP);
     if (sockfd < 0) {
-        // LOG_SYSFATAL << "sockets::createNonblockingOrDie";
+        RTCLOG(RTC_FATAL, "sockets::createNonblockingOrDie");
         abort();
     }
     return sockfd;
@@ -48,7 +49,7 @@ int createNonblockingOrDie(sa_family_t family) {
 void bindOrDie(int sockfd, const struct sockaddr* addr) {
     int ret = ::bind(sockfd, addr, static_cast<socklen_t>(sizeof(struct sockaddr_in6)));
     if (ret < 0) {
-        // LOG_SYSFATAL << "sockets::bindOrDie";
+        RTCLOG(RTC_FATAL, "sockets::bindOrDie");
         abort();
     }
 }
@@ -56,7 +57,7 @@ void bindOrDie(int sockfd, const struct sockaddr* addr) {
 void listenOrDie(int sockfd) {
     int ret = ::listen(sockfd, SOMAXCONN);
     if (ret < 0) {
-        // LOG_SYSFATAL << "sockets::listenOrDie";
+        RTCLOG(RTC_FATAL, "sockets::listenOrDie");
         abort();
     }
 }
@@ -67,7 +68,7 @@ int accept(int sockfd, struct sockaddr_in6* addr) {
                            &addrlen, SOCK_NONBLOCK | SOCK_CLOEXEC);
     if (connfd < 0) {
         int savedErrno = errno;
-        // LOG_SYSERR << "Socket::accept";
+        RTCLOG(RTC_ERROR, "Socket::accept error: %s", strerror(savedErrno));
         switch (savedErrno) {
             case EAGAIN:
             case ECONNABORTED:
@@ -87,10 +88,10 @@ int accept(int sockfd, struct sockaddr_in6* addr) {
             case ENOTSOCK:
             case EOPNOTSUPP:
                 // unexpected errors
-                // LOG_FATAL << "unexpected error of ::accept " << savedErrno;
+                RTCLOG(RTC_FATAL, "unexpected error of ::accept %d", savedErrno);
                 break;
             default:
-                // LOG_FATAL << "unknown error of ::accept " << savedErrno;
+                RTCLOG(RTC_FATAL, "unknown error of ::accept %d", savedErrno);
                 break;
         }
     }
@@ -115,13 +116,13 @@ ssize_t write(int sockfd, const void *buf, size_t count) {
 
 void close(int sockfd) {
     if (::close(sockfd) < 0) {
-        // LOG_SYSERR << "sockets::close";
+        RTCLOG(RTC_ERROR, "sockets::close error: %s", strerror(errno));
     }
 }
 
 void shutdownWrite(int sockfd) {
     if (::shutdown(sockfd, SHUT_WR) < 0) {
-        // LOG_SYSERR << "sockets::shutdownWrite";
+        RTCLOG(RTC_ERROR, "sockets::shutdownWrite error: %s", strerror(errno));
     }
 }
 
@@ -149,7 +150,7 @@ void fromIpPort(const char* ip, uint16_t port, struct sockaddr_in* addr) {
     addr->sin_family = AF_INET;
     addr->sin_port = htons(port);
     if (::inet_pton(AF_INET, ip, &addr->sin_addr) <= 0) {
-        // LOG_SYSERR << "sockets::fromIpPort";
+        RTCLOG(RTC_ERROR, "sockets::fromIpPort error: %s", strerror(errno));
     }
 }
 
@@ -157,7 +158,7 @@ void fromIpPort(const char* ip, uint16_t port, struct sockaddr_in6* addr) {
     addr->sin6_family = AF_INET6;
     addr->sin6_port = htons(port);
     if (::inet_pton(AF_INET6, ip, &addr->sin6_addr) <= 0) {
-        // LOG_SYSERR << "sockets::fromIpPort";
+        RTCLOG(RTC_ERROR, "sockets::fromIpPort error: %s", strerror(errno));
     }
 }
 
@@ -176,7 +177,7 @@ struct sockaddr_in6 getLocalAddr(int sockfd) {
     bzero(&localaddr, sizeof localaddr);
     socklen_t addrlen = static_cast<socklen_t>(sizeof localaddr);
     if (::getsockname(sockfd, sockaddr_cast(&localaddr), &addrlen) < 0) {
-        // LOG_SYSERR << "sockets::getLocalAddr";
+        RTCLOG(RTC_ERROR, "sockets::getLocalAddr error: %s", strerror(errno));
     }
     return localaddr;
 }
@@ -186,7 +187,7 @@ struct sockaddr_in6 getPeerAddr(int sockfd) {
     bzero(&peeraddr, sizeof peeraddr);
     socklen_t addrlen = static_cast<socklen_t>(sizeof peeraddr);
     if (::getpeername(sockfd, sockaddr_cast(&peeraddr), &addrlen) < 0) {
-        // LOG_SYSERR << "sockets::getPeerAddr";
+        RTCLOG(RTC_ERROR, "sockets::getPeerAddr error: %s", strerror(errno));
     }
     return peeraddr;
 }

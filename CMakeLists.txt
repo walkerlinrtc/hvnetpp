@@ -44,3 +44,8 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test_build.cpp")
     add_executable(test_build test_build.cpp)
     target_link_libraries(test_build PRIVATE hvnetpp)
 endif()
+
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/demo_timer.cpp")
+    add_executable(demo_timer demo_timer.cpp)
+    target_link_libraries(demo_timer PRIVATE hvnetpp)
+endif()

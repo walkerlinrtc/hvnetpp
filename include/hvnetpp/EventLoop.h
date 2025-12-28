@@ -7,6 +7,7 @@
 #include <mutex>
 #include <atomic>
 #include <vector>
+#include <sys/types.h>
 
 #include "hvnetpp/TimerId.h"
 #include "hvnetpp/TimerQueue.h"
@@ -56,6 +57,7 @@ private:
     bool eventHandling_;
     bool callingPendingFunctors_;
     const std::thread::id threadId_;
+    const pid_t tid_;
     
     std::unique_ptr<Poller> poller_;
     std::unique_ptr<TimerQueue> timerQueue_;

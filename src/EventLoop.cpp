@@ -8,6 +8,7 @@
 #include <signal.h>
 #include <sys/eventfd.h>
 #include <unistd.h>
+#include <sys/syscall.h>
 
 using namespace hvnetpp;
 
@@ -15,6 +16,10 @@ namespace {
 __thread EventLoop* t_loopInThisThread = nullptr;
 
 const int kPollTimeMs = 10000;
+
+pid_t gettid_() {
+    return static_cast<pid_t>(::syscall(SYS_gettid));
+}
 
 int createEventfd() {
     int evtfd = ::eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
@@ -41,6 +46,7 @@ EventLoop::EventLoop()
       eventHandling_(false),
       callingPendingFunctors_(false),
       threadId_(std::this_thread::get_id()),
+      tid_(gettid_()),
       poller_(new Poller(this)),
       timerQueue_(new TimerQueue(this)),
       wakeupFd_(createEventfd()),
@@ -48,9 +54,9 @@ EventLoop::EventLoop()
       currentActiveChannel_(nullptr),
       pendingQueue_(new PendingQueue(16))
 {
-    RTCLOG(RTC_DEBUG, "EventLoop created %p in thread %zu", this, std::hash<std::thread::id>{}(threadId_));
+    RTCLOG(RTC_DEBUG, "EventLoop created %p in thread %d", this, tid_);
     if (t_loopInThisThread) {
-        RTCLOG(RTC_FATAL, "Another EventLoop %p exists in this thread %zu", t_loopInThisThread, std::hash<std::thread::id>{}(threadId_));
+        RTCLOG(RTC_FATAL, "Another EventLoop %p exists in this thread %d", t_loopInThisThread, tid_);
     } else {
         t_loopInThisThread = this;
     }
@@ -59,7 +65,7 @@ EventLoop::EventLoop()
 }
 
 EventLoop::~EventLoop() {
-    RTCLOG(RTC_DEBUG, "EventLoop %p of thread %zu destructs in thread %zu", this, std::hash<std::thread::id>{}(threadId_), std::hash<std::thread::id>{}(std::this_thread::get_id()));
+    RTCLOG(RTC_DEBUG, "EventLoop %p of thread %d destructs in thread %d", this, tid_, gettid_());
     wakeupChannel_->disableAll();
     wakeupChannel_->remove();
     ::close(wakeupFd_);
@@ -124,7 +130,7 @@ bool EventLoop::hasChannel(Channel* channel) {
 
 void EventLoop::assertInLoopThread() {
     if (!isInLoopThread()) {
-        RTCLOG(RTC_FATAL, "EventLoop::assertInLoopThread - Created in thread %zu current thread %zu", std::hash<std::thread::id>{}(threadId_), std::hash<std::thread::id>{}(std::this_thread::get_id()));
+        RTCLOG(RTC_FATAL, "EventLoop::assertInLoopThread - Created in thread %d current thread %d", tid_, gettid_());
     }
 }
 

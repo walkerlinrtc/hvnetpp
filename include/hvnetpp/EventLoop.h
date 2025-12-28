@@ -40,9 +40,10 @@ public:
     void assertInLoopThread();
 
     // Timers (simplified interface)
-    // TimerId runAt(Timestamp time, TimerCallback cb);
-    // TimerId runAfter(double delay, TimerCallback cb);
-    // TimerId runEvery(double interval, TimerCallback cb);
+    TimerId runAt(Timestamp time, TimerCallback cb);
+    TimerId runAfter(double delay, TimerCallback cb);
+    TimerId runEvery(double interval, TimerCallback cb);
+    void cancel(TimerId timerId);
 
 private:
     void handleRead(); // for wake up

@@ -79,7 +79,7 @@ void EventLoop::loop() {
         eventHandling_ = true;
         for (Channel* channel : activeChannels_) {
             currentActiveChannel_ = channel;
-            channel->handleEvent(Timestamp::now());
+            channel->handleEvent(Timestamp(std::chrono::steady_clock::now()));
         }
         currentActiveChannel_ = nullptr;
         eventHandling_ = false;
@@ -132,7 +132,7 @@ void EventLoop::handleRead() {
     uint64_t one = 1;
     ssize_t n = ::read(wakeupFd_, &one, sizeof one);
     if (n != sizeof one) {
-        RTCLOG(RTC_ERROR, "EventLoop::handleRead() reads %d bytes instead of 8", n);
+        RTCLOG(RTC_ERROR, "EventLoop::handleRead() reads %zd bytes instead of 8", n);
     }
 }
 

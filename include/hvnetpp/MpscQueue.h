@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../src/internal/CircularBuffer.h"
+#include "CircularBuffer.h"
 #include <atomic>
 #include <memory>
 #include <type_traits>

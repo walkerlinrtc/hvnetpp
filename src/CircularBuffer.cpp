@@ -1,4 +1,4 @@
-#include "CircularBuffer.h"
+#include "hvnetpp/internal/CircularBuffer.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

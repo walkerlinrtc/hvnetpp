@@ -1,5 +1,5 @@
 #include "hvnetpp/SocketsOps.h"
-#include "RTCLog.h"
+#include "rtclog.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -16,6 +16,15 @@ namespace hvnetpp {
 namespace sockets {
 
 using SA = struct sockaddr;
+
+namespace {
+
+socklen_t sockaddrLength(const struct sockaddr* addr) {
+    return static_cast<socklen_t>(
+        addr->sa_family == AF_INET6 ? sizeof(struct sockaddr_in6) : sizeof(struct sockaddr_in));
+}
+
+} // namespace
 
 const SA* sockaddr_cast(const struct sockaddr_in* addr) {
     return static_cast<const SA*>(static_cast<const void*>(addr));
@@ -46,8 +55,17 @@ int createNonblockingOrDie(sa_family_t family) {
     return sockfd;
 }
 
+int createNonblockingUdpOrDie(sa_family_t family) {
+    int sockfd = ::socket(family, SOCK_DGRAM | SOCK_NONBLOCK | SOCK_CLOEXEC, IPPROTO_UDP);
+    if (sockfd < 0) {
+        RTCLOG(RTC_FATAL, "sockets::createNonblockingUdpOrDie");
+        abort();
+    }
+    return sockfd;
+}
+
 void bindOrDie(int sockfd, const struct sockaddr* addr) {
-    int ret = ::bind(sockfd, addr, static_cast<socklen_t>(sizeof(struct sockaddr_in6)));
+    int ret = ::bind(sockfd, addr, sockaddrLength(addr));
     if (ret < 0) {
         RTCLOG(RTC_FATAL, "sockets::bindOrDie");
         abort();
@@ -99,7 +117,7 @@ int accept(int sockfd, struct sockaddr_in6* addr) {
 }
 
 int connect(int sockfd, const struct sockaddr* addr) {
-    return ::connect(sockfd, addr, static_cast<socklen_t>(sizeof(struct sockaddr_in6)));
+    return ::connect(sockfd, addr, sockaddrLength(addr));
 }
 
 ssize_t read(int sockfd, void *buf, size_t count) {
@@ -129,8 +147,14 @@ void shutdownWrite(int sockfd) {
 void toIpPort(char* buf, size_t size, const struct sockaddr* addr) {
     toIp(buf, size, addr);
     size_t end = ::strlen(buf);
-    const struct sockaddr_in* addr4 = sockaddr_in_cast(addr);
-    uint16_t port = ntohs(addr4->sin_port);
+    uint16_t port = 0;
+    if (addr->sa_family == AF_INET) {
+        const struct sockaddr_in* addr4 = sockaddr_in_cast(addr);
+        port = ntohs(addr4->sin_port);
+    } else if (addr->sa_family == AF_INET6) {
+        const struct sockaddr_in6* addr6 = sockaddr_in6_cast(addr);
+        port = ntohs(addr6->sin6_port);
+    }
     snprintf(buf + end, size - end, ":%u", port);
 }
 

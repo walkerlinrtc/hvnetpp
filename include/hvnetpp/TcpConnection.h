@@ -60,6 +60,7 @@ private:
     void sendInLoop(const std::string& message);
     void sendInLoop(const void* message, size_t len);
     void shutdownInLoop();
+    void closeSocket();
     void setState(StateE s) { state_ = s; }
 
     EventLoop* loop_;

@@ -16,6 +16,7 @@ public:
     ~Channel();
 
     void handleEvent();
+    void tie(const std::shared_ptr<void>& obj);
     void setReadCallback(ReadEventCallback cb) { readCallback_ = std::move(cb); }
     void setWriteCallback(EventCallback cb) { writeCallback_ = std::move(cb); }
     void setCloseCallback(EventCallback cb) { closeCallback_ = std::move(cb); }
@@ -42,6 +43,7 @@ public:
     void remove();
 
 private:
+    void handleEventWithGuard();
     void update();
 
     static const int kNoneEvent;
@@ -56,6 +58,8 @@ private:
 
     bool eventHandling_;
     bool addedToLoop_;
+    bool tied_;
+    std::weak_ptr<void> tie_;
 
     ReadEventCallback readCallback_;
     EventCallback writeCallback_;

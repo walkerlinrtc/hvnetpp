@@ -14,14 +14,14 @@
 namespace hvnetpp {
 
 // Internal Acceptor class
-class Acceptor {
+class Acceptor : public std::enable_shared_from_this<Acceptor> {
 public:
     using NewConnectionCallback = std::function<void(int sockfd, const InetAddress&)>;
 
     Acceptor(EventLoop* loop, const InetAddress& listenAddr, bool reuseport)
         : loop_(loop),
           acceptSocket_(sockets::createNonblockingOrDie(listenAddr.family())),
-          acceptChannel_(loop, acceptSocket_),
+          acceptChannel_(std::make_shared<Channel>(loop, acceptSocket_)),
           listening_(false),
           idleFd_(::open("/dev/null", O_RDONLY | O_CLOEXEC)) {
         
@@ -30,12 +30,16 @@ public:
         sockets::setReusePort(acceptSocket_, reuseport);
         sockets::bindOrDie(acceptSocket_, listenAddr.getSockAddr());
         
-        acceptChannel_.setReadCallback(std::bind(&Acceptor::handleRead, this));
+        acceptChannel_->setReadCallback(std::bind(&Acceptor::handleRead, this));
     }
 
     ~Acceptor() {
-        acceptChannel_.disableAll();
-        acceptChannel_.remove();
+        std::shared_ptr<Channel> acceptChannel = std::move(acceptChannel_);
+        if (acceptChannel) {
+            acceptChannel->disableAll();
+            acceptChannel->remove();
+            loop_->queueInLoop([acceptChannel]() {});
+        }
         ::close(acceptSocket_);
         ::close(idleFd_);
     }
@@ -44,11 +48,15 @@ public:
         loop_->assertInLoopThread();
         listening_ = true;
         sockets::listenOrDie(acceptSocket_);
-        acceptChannel_.enableReading();
+        acceptChannel_->enableReading();
     }
 
     void setNewConnectionCallback(const NewConnectionCallback& cb) {
         newConnectionCallback_ = cb;
+    }
+
+    void tieChannel() {
+        acceptChannel_->tie(shared_from_this());
     }
 
 private:
@@ -83,7 +91,7 @@ private:
 
     EventLoop* loop_;
     int acceptSocket_;
-    Channel acceptChannel_;
+    std::shared_ptr<Channel> acceptChannel_;
     NewConnectionCallback newConnectionCallback_;
     bool listening_;
     int idleFd_;
@@ -92,8 +100,9 @@ private:
 TcpServer::TcpServer(EventLoop* loop, const InetAddress& listenAddr, const std::string& nameArg)
     : loop_(loop),
       name_(nameArg),
-      acceptor_(new Acceptor(loop, listenAddr, true)),
+      acceptor_(std::make_shared<Acceptor>(loop, listenAddr, true)),
       nextConnId_(1) {
+    acceptor_->tieChannel();
     acceptor_->setNewConnectionCallback(std::bind(&TcpServer::newConnection, this, std::placeholders::_1, std::placeholders::_2));
 }
 

@@ -27,14 +27,17 @@ UdpSocket::UdpSocket(EventLoop* loop, const std::string& name)
       name_(name),
       family_(AF_UNSPEC),
       sockfd_(-1),
-      channel_(nullptr),
+      channel_(),
+      callbackToken_(std::make_shared<bool>(true)),
       readBuf_(65536) { // Max UDP packet size
 }
 
 UdpSocket::~UdpSocket() {
-    if (channel_) {
-        channel_->disableAll();
-        channel_->remove();
+    std::shared_ptr<Channel> channel = std::move(channel_);
+    if (channel) {
+        channel->disableAll();
+        channel->remove();
+        loop_->queueInLoop([channel]() {});
     }
     if (sockfd_ >= 0) {
         sockets::close(sockfd_);
@@ -53,11 +56,16 @@ bool UdpSocket::ensureSocket(sa_family_t family) {
 
     sockfd_ = sockets::createNonblockingUdpOrDie(family);
     family_ = family;
-    channel_.reset(new Channel(loop_, sockfd_));
+    channel_ = std::make_shared<Channel>(loop_, sockfd_);
 
     sockets::setReuseAddr(sockfd_, true);
     sockets::setReusePort(sockfd_, true);
-    channel_->setReadCallback(std::bind(&UdpSocket::handleRead, this));
+    std::weak_ptr<bool> token = callbackToken_;
+    channel_->setReadCallback([this, token]() {
+        if (token.lock()) {
+            handleRead();
+        }
+    });
     return true;
 }
 

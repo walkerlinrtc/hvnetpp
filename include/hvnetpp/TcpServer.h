@@ -2,6 +2,7 @@
 
 #include "hvnetpp/TcpConnection.h"
 #include <map>
+#include <memory>
 #include <string>
 
 namespace hvnetpp {
@@ -35,7 +36,7 @@ private:
     const std::string ipPort_;
     const std::string name_;
     
-    std::unique_ptr<Acceptor> acceptor_; // Internal class to handle bind/listen/accept
+    std::shared_ptr<Acceptor> acceptor_; // Internal class to handle bind/listen/accept
     
     ConnectionCallback connectionCallback_;
     MessageCallback messageCallback_;

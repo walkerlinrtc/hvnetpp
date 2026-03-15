@@ -39,6 +39,14 @@ void resetTimerfd(int timerfd, Timestamp expiration) {
     }
 }
 
+void disarmTimerfd(int timerfd) {
+    struct itimerspec newValue;
+    memset(&newValue, 0, sizeof newValue);
+    if (::timerfd_settime(timerfd, 0, &newValue, NULL) != 0) {
+        RTCLOG(RTC_ERROR, "timerfd_settime(disarm) error: %s", strerror(errno));
+    }
+}
+
 void readTimerfd(int timerfd, Timestamp now) {
     uint64_t howmany;
     ssize_t n = ::read(timerfd, &howmany, sizeof howmany);
@@ -90,10 +98,18 @@ void TimerQueue::cancelInLoop(TimerId timerId) {
     ActiveTimer timer(timerId.timer_, timerId.sequence_);
     auto it = activeTimers_.find(timer);
     if (it != activeTimers_.end()) {
+        const bool earliestChanged = !timers_.empty() && timers_.begin()->second == it->first;
         size_t n = timers_.erase(Entry(it->first->expiration(), it->first));
         assert(n == 1);
         delete it->first;
         activeTimers_.erase(it);
+        if (earliestChanged) {
+            if (!timers_.empty()) {
+                resetTimerfd(timerfd_, timers_.begin()->second->expiration());
+            } else {
+                disarmTimerfd(timerfd_);
+            }
+        }
     } else if (callingExpiredTimers_) {
         cancelingTimers_.insert(timer);
     }

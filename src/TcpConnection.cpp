@@ -2,7 +2,7 @@
 #include "hvnetpp/Channel.h"
 #include "hvnetpp/EventLoop.h"
 #include "hvnetpp/SocketsOps.h"
-#include "RTCLog.h"
+#include "rtclog.h"
 #include <unistd.h>
 #include <sys/socket.h>
 #include <netinet/tcp.h>
@@ -27,11 +27,11 @@ TcpConnection::TcpConnection(EventLoop* loop,
     channel_->setWriteCallback(std::bind(&TcpConnection::handleWrite, this));
     channel_->setCloseCallback(std::bind(&TcpConnection::handleClose, this));
     channel_->setErrorCallback(std::bind(&TcpConnection::handleError, this));
-    socketFd_ = sockfd; // redundant but clear
 }
 
 TcpConnection::~TcpConnection() {
     assert(state_ == kDisconnected);
+    closeSocket();
 }
 
 void TcpConnection::connectEstablished() {
@@ -54,6 +54,7 @@ void TcpConnection::connectDestroyed() {
         }
     }
     channel_->remove();
+    closeSocket();
 }
 
 void TcpConnection::handleRead() {
@@ -192,13 +193,22 @@ void TcpConnection::shutdown() {
 
 void TcpConnection::shutdownInLoop() {
     loop_->assertInLoopThread();
-    if (!channel_->isWriting()) {
+    if (socketFd_ >= 0 && !channel_->isWriting()) {
         sockets::shutdownWrite(socketFd_);
     }
 }
 
 void TcpConnection::setTcpNoDelay(bool on) {
-    sockets::setTcpNoDelay(socketFd_, on);
+    if (socketFd_ >= 0) {
+        sockets::setTcpNoDelay(socketFd_, on);
+    }
+}
+
+void TcpConnection::closeSocket() {
+    if (socketFd_ >= 0) {
+        sockets::close(socketFd_);
+        socketFd_ = -1;
+    }
 }
 
 } // namespace hvnetpp

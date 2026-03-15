@@ -7,6 +7,7 @@ namespace hvnetpp {
 namespace sockets {
 
 int createNonblockingOrDie(sa_family_t family);
+int createNonblockingUdpOrDie(sa_family_t family);
 int connect(int sockfd, const struct sockaddr* addr);
 void bindOrDie(int sockfd, const struct sockaddr* addr);
 void listenOrDie(int sockfd);

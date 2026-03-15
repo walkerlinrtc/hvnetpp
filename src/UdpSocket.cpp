@@ -3,7 +3,7 @@
 #include "hvnetpp/Channel.h"
 #include "hvnetpp/Buffer.h"
 #include "hvnetpp/SocketsOps.h"
-#include "RTCLog.h"
+#include "rtclog.h"
 
 #include <sys/socket.h>
 #include <unistd.h>
@@ -12,10 +12,19 @@
 
 namespace hvnetpp {
 
+namespace {
+
+socklen_t socketAddrLength(const InetAddress& addr) {
+    return static_cast<socklen_t>(
+        addr.family() == AF_INET6 ? sizeof(struct sockaddr_in6) : sizeof(struct sockaddr_in));
+}
+
+} // namespace
+
 UdpSocket::UdpSocket(EventLoop* loop, const std::string& name)
     : loop_(loop),
       name_(name),
-      sockfd_(sockets::createNonblockingOrDie(AF_INET)), // Default to IPv4 for now
+      sockfd_(sockets::createNonblockingUdpOrDie(AF_INET)),
       channel_(new Channel(loop, sockfd_)),
       readBuf_(65536) { // Max UDP packet size
     
@@ -38,7 +47,7 @@ bool UdpSocket::bind(const InetAddress& addr) {
 }
 
 ssize_t UdpSocket::sendTo(const void* data, size_t len, const InetAddress& destAddr) {
-    return ::sendto(sockfd_, data, len, 0, destAddr.getSockAddr(), sizeof(struct sockaddr_in6));
+    return ::sendto(sockfd_, data, len, 0, destAddr.getSockAddr(), socketAddrLength(destAddr));
 }
 
 ssize_t UdpSocket::sendTo(Buffer* buf, const InetAddress& destAddr) {
@@ -47,17 +56,26 @@ ssize_t UdpSocket::sendTo(Buffer* buf, const InetAddress& destAddr) {
 
 void UdpSocket::handleRead() {
     loop_->assertInLoopThread();
-    struct sockaddr_in6 peerAddr;
-    socklen_t addrLen = sizeof peerAddr;
+    struct sockaddr_storage peerAddrStorage;
+    socklen_t addrLen = sizeof peerAddrStorage;
     ssize_t n = ::recvfrom(sockfd_, readBuf_.data(), readBuf_.size(), 0, 
-                           sockets::sockaddr_cast(&peerAddr), &addrLen);
+                           reinterpret_cast<struct sockaddr*>(&peerAddrStorage), &addrLen);
     
     if (n >= 0) {
         if (readCallback_) {
             Buffer buf;
             buf.append(readBuf_.data(), n);
-            InetAddress peer(peerAddr);
-            readCallback_(peer, &buf);
+            if (peerAddrStorage.ss_family == AF_INET6) {
+                const struct sockaddr_in6* peerAddr =
+                    reinterpret_cast<const struct sockaddr_in6*>(&peerAddrStorage);
+                InetAddress peer(*peerAddr);
+                readCallback_(peer, &buf);
+            } else {
+                const struct sockaddr_in* peerAddr =
+                    reinterpret_cast<const struct sockaddr_in*>(&peerAddrStorage);
+                InetAddress peer(*peerAddr);
+                readCallback_(peer, &buf);
+            }
         }
     } else {
         RTCLOG(RTC_ERROR, "UdpSocket::handleRead() error: %s", strerror(errno));

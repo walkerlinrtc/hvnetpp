@@ -5,6 +5,7 @@
 #include "hvnetpp/SocketsOps.h"
 #include "rtclog.h"
 
+#include <errno.h>
 #include <sys/socket.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -24,29 +25,63 @@ socklen_t socketAddrLength(const InetAddress& addr) {
 UdpSocket::UdpSocket(EventLoop* loop, const std::string& name)
     : loop_(loop),
       name_(name),
-      sockfd_(sockets::createNonblockingUdpOrDie(AF_INET)),
-      channel_(new Channel(loop, sockfd_)),
+      family_(AF_UNSPEC),
+      sockfd_(-1),
+      channel_(),
+      callbackToken_(std::make_shared<bool>(true)),
       readBuf_(65536) { // Max UDP packet size
-    
-    sockets::setReuseAddr(sockfd_, true);
-    sockets::setReusePort(sockfd_, true);
-    
-    channel_->setReadCallback(std::bind(&UdpSocket::handleRead, this));
 }
 
 UdpSocket::~UdpSocket() {
-    channel_->disableAll();
-    channel_->remove();
-    sockets::close(sockfd_);
+    std::shared_ptr<Channel> channel = std::move(channel_);
+    if (channel) {
+        channel->disableAll();
+        channel->remove();
+        loop_->queueInLoop([channel]() {});
+    }
+    if (sockfd_ >= 0) {
+        sockets::close(sockfd_);
+    }
+}
+
+bool UdpSocket::ensureSocket(sa_family_t family) {
+    if (sockfd_ >= 0) {
+        if (family_ != family) {
+            RTCLOG(RTC_ERROR, "UdpSocket::ensureSocket() family mismatch: existing=%d requested=%d", family_, family);
+            errno = EAFNOSUPPORT;
+            return false;
+        }
+        return true;
+    }
+
+    sockfd_ = sockets::createNonblockingUdpOrDie(family);
+    family_ = family;
+    channel_ = std::make_shared<Channel>(loop_, sockfd_);
+
+    sockets::setReuseAddr(sockfd_, true);
+    sockets::setReusePort(sockfd_, true);
+    std::weak_ptr<bool> token = callbackToken_;
+    channel_->setReadCallback([this, token]() {
+        if (token.lock()) {
+            handleRead();
+        }
+    });
+    return true;
 }
 
 bool UdpSocket::bind(const InetAddress& addr) {
+    if (!ensureSocket(addr.family())) {
+        return false;
+    }
     sockets::bindOrDie(sockfd_, addr.getSockAddr());
     channel_->enableReading();
     return true;
 }
 
 ssize_t UdpSocket::sendTo(const void* data, size_t len, const InetAddress& destAddr) {
+    if (!ensureSocket(destAddr.family())) {
+        return -1;
+    }
     return ::sendto(sockfd_, data, len, 0, destAddr.getSockAddr(), socketAddrLength(destAddr));
 }
 

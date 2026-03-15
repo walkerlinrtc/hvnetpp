@@ -1,6 +1,7 @@
 #include "hvnetpp/TimerQueue.h"
 #include "hvnetpp/EventLoop.h"
 #include "rtclog.h"
+#include <cstdlib>
 #include <sys/timerfd.h>
 #include <unistd.h>
 #include <cstring>
@@ -12,6 +13,7 @@ int createTimerfd() {
     int timerfd = ::timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
     if (timerfd < 0) {
         RTCLOG(RTC_FATAL, "Failed in createTimerfd error: %s", strerror(errno));
+        std::abort();
     }
     return timerfd;
 }
@@ -34,6 +36,14 @@ void resetTimerfd(int timerfd, Timestamp expiration) {
     int ret = ::timerfd_settime(timerfd, 0, &newValue, &oldValue);
     if (ret) {
         RTCLOG(RTC_ERROR, "timerfd_settime() error: %s", strerror(errno));
+    }
+}
+
+void disarmTimerfd(int timerfd) {
+    struct itimerspec newValue;
+    memset(&newValue, 0, sizeof newValue);
+    if (::timerfd_settime(timerfd, 0, &newValue, NULL) != 0) {
+        RTCLOG(RTC_ERROR, "timerfd_settime(disarm) error: %s", strerror(errno));
     }
 }
 
@@ -88,10 +98,18 @@ void TimerQueue::cancelInLoop(TimerId timerId) {
     ActiveTimer timer(timerId.timer_, timerId.sequence_);
     auto it = activeTimers_.find(timer);
     if (it != activeTimers_.end()) {
+        const bool earliestChanged = !timers_.empty() && timers_.begin()->second == it->first;
         size_t n = timers_.erase(Entry(it->first->expiration(), it->first));
         assert(n == 1);
         delete it->first;
         activeTimers_.erase(it);
+        if (earliestChanged) {
+            if (!timers_.empty()) {
+                resetTimerfd(timerfd_, timers_.begin()->second->expiration());
+            } else {
+                disarmTimerfd(timerfd_);
+            }
+        }
     } else if (callingExpiredTimers_) {
         cancelingTimers_.insert(timer);
     }

@@ -3,6 +3,8 @@
 #include "hvnetpp/EventLoop.h"
 #include "hvnetpp/SocketsOps.h"
 #include "rtclog.h"
+#include <cerrno>
+#include <cstring>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <netinet/tcp.h>
@@ -26,18 +28,19 @@ TcpConnection::TcpConnection(EventLoop* loop,
     channel_->setReadCallback(std::bind(&TcpConnection::handleRead, this));
     channel_->setWriteCallback(std::bind(&TcpConnection::handleWrite, this));
     channel_->setCloseCallback(std::bind(&TcpConnection::handleClose, this));
-    channel_->setErrorCallback(std::bind(&TcpConnection::handleError, this));
+    channel_->setErrorCallback(std::bind(static_cast<void (TcpConnection::*)()>(&TcpConnection::handleError), this));
 }
 
 TcpConnection::~TcpConnection() {
-    assert(state_ == kDisconnected);
+    assert(state() == kDisconnected);
     closeSocket();
 }
 
 void TcpConnection::connectEstablished() {
     loop_->assertInLoopThread();
-    assert(state_ == kConnecting);
+    assert(state() == kConnecting);
     setState(kConnected);
+    channel_->tie(shared_from_this());
     channel_->enableReading();
     if (connectionCallback_) {
         connectionCallback_(shared_from_this());
@@ -46,7 +49,7 @@ void TcpConnection::connectEstablished() {
 
 void TcpConnection::connectDestroyed() {
     loop_->assertInLoopThread();
-    if (state_ == kConnected) {
+    if (state() != kDisconnected) {
         setState(kDisconnected);
         channel_->disableAll();
         if (connectionCallback_) {
@@ -59,6 +62,9 @@ void TcpConnection::connectDestroyed() {
 
 void TcpConnection::handleRead() {
     loop_->assertInLoopThread();
+    if (state() == kDisconnected) {
+        return;
+    }
     int savedErrno = 0;
     ssize_t n = inputBuffer_.readFd(channel_->fd(), &savedErrno);
     if (n > 0) {
@@ -68,12 +74,15 @@ void TcpConnection::handleRead() {
     } else if (n == 0) {
         handleClose();
     } else {
-        handleError();
+        handleError(savedErrno);
     }
 }
 
 void TcpConnection::handleWrite() {
     loop_->assertInLoopThread();
+    if (state() == kDisconnected) {
+        return;
+    }
     if (channel_->isWriting()) {
         ssize_t n = ::write(channel_->fd(), outputBuffer_.peek(), outputBuffer_.readableBytes());
         if (n > 0) {
@@ -83,19 +92,19 @@ void TcpConnection::handleWrite() {
                 if (writeCompleteCallback_) {
                     loop_->queueInLoop(std::bind(writeCompleteCallback_, shared_from_this()));
                 }
-                if (state_ == kDisconnecting) {
+                if (state() == kDisconnecting) {
                     shutdownInLoop();
                 }
             }
         } else {
-            RTCLOG(RTC_ERROR, "TcpConnection::handleWrite error: %s", strerror(errno));
+            handleError(n == 0 ? EPIPE : errno);
         }
     }
 }
 
 void TcpConnection::handleClose() {
     loop_->assertInLoopThread();
-    assert(state_ == kConnected || state_ == kDisconnecting);
+    assert(state() == kConnected || state() == kDisconnecting);
     setState(kDisconnected);
     channel_->disableAll();
 
@@ -110,31 +119,50 @@ void TcpConnection::handleClose() {
 
 void TcpConnection::handleError() {
     int err = sockets::getSocketError(channel_->fd());
-    RTCLOG(RTC_ERROR, "TcpConnection::handleError name=%s - SO_ERROR=%d: %s", name_.c_str(), err, strerror(err));
+    if (err != 0) {
+        handleError(err);
+    }
+}
+
+void TcpConnection::handleError(int err) {
+    if (err == 0 || err == EAGAIN || err == EWOULDBLOCK || err == EINTR) {
+        return;
+    }
+    RTCLOG(RTC_ERROR, "TcpConnection::handleError name=%s - error=%d: %s", name_.c_str(), err, strerror(err));
+    if (state() == kConnected || state() == kDisconnecting) {
+        handleClose();
+    }
 }
 
 void TcpConnection::send(const std::string& message) {
-    if (state_ == kConnected) {
-        if (loop_->isInLoopThread()) {
+    if (loop_->isInLoopThread()) {
+        if (state() == kConnected) {
             sendInLoop(message);
-        } else {
-            loop_->runInLoop(
-                std::bind(static_cast<void(TcpConnection::*)(const std::string&)>(&TcpConnection::sendInLoop),
-                          this, message));
         }
+    } else if (state() == kConnected) {
+        TcpConnectionPtr self(shared_from_this());
+        loop_->queueInLoop([self, message]() {
+            if (self->state() == kConnected) {
+                self->sendInLoop(message);
+            }
+        });
     }
 }
 
 void TcpConnection::send(Buffer* buf) {
-    if (state_ == kConnected) {
-        if (loop_->isInLoopThread()) {
+    if (loop_->isInLoopThread()) {
+        if (state() == kConnected) {
             sendInLoop(buf->peek(), buf->readableBytes());
             buf->retrieveAll();
-        } else {
-            loop_->runInLoop(
-                std::bind(static_cast<void(TcpConnection::*)(const std::string&)>(&TcpConnection::sendInLoop),
-                          this, buf->retrieveAllAsString()));
         }
+    } else if (state() == kConnected) {
+        std::string message = buf->retrieveAllAsString();
+        TcpConnectionPtr self(shared_from_this());
+        loop_->queueInLoop([self, message]() {
+            if (self->state() == kConnected) {
+                self->sendInLoop(message);
+            }
+        });
     }
 }
 
@@ -148,7 +176,7 @@ void TcpConnection::sendInLoop(const void* data, size_t len) {
     size_t remaining = len;
     bool faultError = false;
 
-    if (state_ == kDisconnected) {
+    if (state() == kDisconnected) {
         return;
     }
 
@@ -161,11 +189,12 @@ void TcpConnection::sendInLoop(const void* data, size_t len) {
                 loop_->queueInLoop(std::bind(writeCompleteCallback_, shared_from_this()));
             }
         } else {
+            const int savedErrno = errno;
             nwrote = 0;
-            if (errno != EWOULDBLOCK) {
-                if (errno == EPIPE || errno == ECONNRESET) {
-                    faultError = true;
-                }
+            if (savedErrno != EWOULDBLOCK && savedErrno != EAGAIN && savedErrno != EINTR) {
+                faultError = true;
+                handleError(savedErrno);
+                remaining = 0;
             }
         }
     }
@@ -185,9 +214,19 @@ void TcpConnection::sendInLoop(const void* data, size_t len) {
 }
 
 void TcpConnection::shutdown() {
-    if (state_ == kConnected) {
-        setState(kDisconnecting);
-        loop_->runInLoop(std::bind(&TcpConnection::shutdownInLoop, this));
+    if (loop_->isInLoopThread()) {
+        if (state() == kConnected) {
+            setState(kDisconnecting);
+            shutdownInLoop();
+        }
+    } else if (state() == kConnected) {
+        TcpConnectionPtr self(shared_from_this());
+        loop_->queueInLoop([self]() {
+            if (self->state() == kConnected) {
+                self->setState(kDisconnecting);
+                self->shutdownInLoop();
+            }
+        });
     }
 }
 
